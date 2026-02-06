@@ -115,11 +115,11 @@ class TransparentProxyProvider: NEAppProxyProvider {
             return true
         }
         
-        // 处理 UDP
-        if let udpFlow = flow as? NEAppProxyUDPFlow {
-            logger.info("📱 UDP代理: \(appID)")
-            Task { await handleUDPFlow(udpFlow) }
-            return true
+        // UDP: Surge SOCKS5 不支持 UDP ASSOCIATE，返回 false 让系统处理
+        // 如果启用了 Surge Tun 模式，UDP 流量会被 Surge 代理
+        if flow is NEAppProxyUDPFlow {
+            logger.info("⏭️ UDP直连(SOCKS5不支持UDP): \(appID)")
+            return false
         }
         
         return false
