@@ -8,7 +8,7 @@ struct ProxyConfig: Codable, Equatable {
     var preferredProtocol: ProxyProtocol
     
     static let `default` = ProxyConfig(
-        host: "127.0.0.1",
+        host: "192.168.1.68",
         httpPort: 6152,
         socksPort: 6153,
         preferredProtocol: .socks5
