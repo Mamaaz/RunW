@@ -98,15 +98,15 @@ class TransparentProxyProvider: NEAppProxyProvider {
             return false
         }
         
-        logger.info("📱 代理: \(appID)")
-        
+        // 只处理 TCP，UDP 让系统直接处理
         if let tcpFlow = flow as? NEAppProxyTCPFlow {
+            logger.info("📱 TCP代理: \(appID)")
             Task { await handleTCPFlow(tcpFlow) }
             return true
-        } else if let udpFlow = flow as? NEAppProxyUDPFlow {
-            // UDP 直接放行
-            udpFlow.open(withLocalEndpoint: nil) { _ in }
-            return true
+        } else if flow is NEAppProxyUDPFlow {
+            // UDP 不处理，让系统直接发送（包括 DNS 和 QUIC）
+            logger.debug("⏭️ UDP直连: \(appID)")
+            return false
         }
         
         return false
