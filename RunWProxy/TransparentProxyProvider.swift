@@ -468,28 +468,61 @@ class UDPAssociation {
         
         controlConnection = NWConnection(to: endpoint, using: .tcp)
         
+        logger.info("📡 连接到 \(self.proxyHost):\(self.proxyPort)...")
         guard await waitForConnection(controlConnection!) else {
+            logger.error("❌ 无法连接到 SOCKS5 代理")
             throw ProxyError.connectionFailed
         }
+        logger.info("✅ TCP 连接成功")
         
         // 2. SOCKS5 问候
         try await send(Data([0x05, 0x01, 0x00]), on: controlConnection!)
         
         let r1 = try await receive(on: controlConnection!)
+        logger.info("📨 问候响应: \(r1.map { String(format: "%02X", $0) }.joined(separator: " "))")
         guard r1.count >= 2, r1[0] == 0x05, r1[1] == 0x00 else {
+            logger.error("❌ 问候失败: \(r1.map { String(format: "%02X", $0) }.joined(separator: " "))")
             throw ProxyError.handshakeFailed
         }
+        logger.info("✅ 问候成功")
         
         // 3. UDP ASSOCIATE 请求 (CMD = 0x03)
         // 告诉代理我们要发 UDP，源地址设为 0.0.0.0:0
         var req = Data([0x05, 0x03, 0x00, 0x01])  // VER, CMD=UDP_ASSOCIATE, RSV, ATYP=IPv4
         req.append(contentsOf: [0x00, 0x00, 0x00, 0x00])  // 0.0.0.0
         req.append(contentsOf: [0x00, 0x00])  // port 0
+        logger.info("📤 发送 UDP ASSOCIATE 请求...")
         try await send(req, on: controlConnection!)
         
         // 4. 解析响应，获取 relay 地址
         let r2 = try await receive(on: controlConnection!)
-        guard r2.count >= 10, r2[0] == 0x05, r2[1] == 0x00 else {
+        logger.info("📨 UDP ASSOCIATE 响应: \(r2.map { String(format: "%02X", $0) }.joined(separator: " "))")
+        
+        guard r2.count >= 10 else {
+            logger.error("❌ 响应太短: \(r2.count) 字节")
+            throw ProxyError.udpAssociateFailed
+        }
+        
+        guard r2[0] == 0x05 else {
+            logger.error("❌ 版本错误: \(r2[0])")
+            throw ProxyError.udpAssociateFailed
+        }
+        
+        guard r2[1] == 0x00 else {
+            let errorCode = r2[1]
+            let errorMsg: String
+            switch errorCode {
+            case 0x01: errorMsg = "一般 SOCKS 服务器故障"
+            case 0x02: errorMsg = "规则不允许连接"
+            case 0x03: errorMsg = "网络不可达"
+            case 0x04: errorMsg = "主机不可达"
+            case 0x05: errorMsg = "连接被拒绝"
+            case 0x06: errorMsg = "TTL 过期"
+            case 0x07: errorMsg = "不支持的命令"
+            case 0x08: errorMsg = "不支持的地址类型"
+            default: errorMsg = "未知错误 \(errorCode)"
+            }
+            logger.error("❌ UDP ASSOCIATE 被拒绝: \(errorMsg)")
             throw ProxyError.udpAssociateFailed
         }
         
