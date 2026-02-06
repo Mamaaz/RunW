@@ -121,6 +121,12 @@ class ProxyManager: ObservableObject {
         newManager.localizedDescription = "RunW 透明代理"
         newManager.isEnabled = true
         
+        // 关键：设置 appRules 来匹配流量
+        // 使用通配符匹配所有应用的所有流量
+        let matchAllRule = NEAppRule(signingIdentifier: "*", designatedRequirement: "")
+        matchAllRule.matchDomains = ["*"]  // 匹配所有域名
+        newManager.appRules = [matchAllRule]
+        
         do {
             try await newManager.saveToPreferences()
             try await newManager.loadFromPreferences()
