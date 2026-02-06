@@ -125,12 +125,13 @@ class ProxyManager: ObservableObject {
         if !apps.isEmpty {
             var rules: [NEAppRule] = []
             for app in apps where app.isEnabled && app.rule == .proxy {
-                let rule = NEAppRule(signingIdentifier: app.bundleIdentifier, designatedRequirement: "")
+                // 使用 bundle identifier 和通用证书要求
+                let rule = NEAppRule(signingIdentifier: app.bundleIdentifier, designatedRequirement: "anchor apple generic")
                 rules.append(rule)
+                print("📱 添加规则: \(app.bundleIdentifier)")
             }
             if !rules.isEmpty {
                 newManager.appRules = rules
-                print("📱 设置 appRules: \(rules.map { $0.matchSigningIdentifier })")
             }
         }
         
@@ -162,7 +163,7 @@ class ProxyManager: ObservableObject {
         // 为每个要代理的应用创建规则
         var rules: [NEAppRule] = []
         for app in apps where app.isEnabled && app.rule == .proxy {
-            let rule = NEAppRule(signingIdentifier: app.bundleIdentifier, designatedRequirement: "")
+            let rule = NEAppRule(signingIdentifier: app.bundleIdentifier, designatedRequirement: "anchor apple generic")
             rules.append(rule)
         }
         
