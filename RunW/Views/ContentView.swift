@@ -145,7 +145,7 @@ struct ContentView: View {
             } else {
                 Button {
                     Task {
-                        await proxyManager.installExtension()
+                        await proxyManager.installExtension(apps: appManager.apps)
                     }
                 } label: {
                     Text("安装扩展")

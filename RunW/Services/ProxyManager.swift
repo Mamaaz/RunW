@@ -102,7 +102,7 @@ class ProxyManager: ObservableObject {
     
     // MARK: - Install Extension
     
-    func installExtension() async {
+    func installExtension(apps: [ProxyApp] = []) async {
         // 先保存配置到 App Group
         saveConfig()
         
@@ -121,7 +121,18 @@ class ProxyManager: ObservableObject {
         newManager.localizedDescription = "RunW 透明代理"
         newManager.isEnabled = true
         
-        // 不设置 appRules - NEAppProxyProvider 会接收所有流量
+        // 为每个要代理的应用创建规则
+        if !apps.isEmpty {
+            var rules: [NEAppRule] = []
+            for app in apps where app.isEnabled && app.rule == .proxy {
+                let rule = NEAppRule(signingIdentifier: app.bundleIdentifier, designatedRequirement: "")
+                rules.append(rule)
+            }
+            if !rules.isEmpty {
+                newManager.appRules = rules
+                print("📱 设置 appRules: \(rules.map { $0.matchSigningIdentifier })")
+            }
+        }
         
         do {
             try await newManager.saveToPreferences()
@@ -141,6 +152,33 @@ class ProxyManager: ObservableObject {
         } catch {
             print("安装失败: \(error)")
             proxyStatus = "安装失败: \(error.localizedDescription)"
+        }
+    }
+    
+    /// 更新应用规则
+    func updateAppRules(apps: [ProxyApp]) async {
+        guard let manager = manager else { return }
+        
+        // 为每个要代理的应用创建规则
+        var rules: [NEAppRule] = []
+        for app in apps where app.isEnabled && app.rule == .proxy {
+            let rule = NEAppRule(signingIdentifier: app.bundleIdentifier, designatedRequirement: "")
+            rules.append(rule)
+        }
+        
+        if rules.isEmpty {
+            print("⚠️ 没有要代理的应用")
+            return
+        }
+        
+        manager.appRules = rules
+        print("📱 更新 appRules: \(rules.count) 个应用")
+        
+        do {
+            try await manager.saveToPreferences()
+            try await manager.loadFromPreferences()
+        } catch {
+            print("更新规则失败: \(error)")
         }
     }
     
