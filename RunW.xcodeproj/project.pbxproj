@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -17,7 +17,33 @@
 		008 /* ProxyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 108 /* ProxyManager.swift */; };
 		009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200 /* Assets.xcassets */; };
 		010 /* SurgeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 109 /* SurgeService.swift */; };
+		6FD685A02F35A2D60062D17F /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6FD6859F2F35A2D60062D17F /* NetworkExtension.framework */; };
+		6FD685A82F35A2D60062D17F /* RunWProxy.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6FD6859D2F35A2D60062D17F /* RunWProxy.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		6FD685A62F35A2D60062D17F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 800 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6FD6859C2F35A2D60062D17F;
+			remoteInfo = RunWProxy;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		6FD685A92F35A2D60062D17F /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6FD685A82F35A2D60062D17F /* RunWProxy.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		100 /* RunW.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RunW.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -32,13 +58,37 @@
 		109 /* SurgeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurgeService.swift; sourceTree = "<group>"; };
 		200 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		201 /* RunW.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunW.entitlements; sourceTree = "<group>"; };
+		6FD6859D2F35A2D60062D17F /* RunWProxy.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RunWProxy.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		6FD6859F2F35A2D60062D17F /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		6FD685AC2F35A2D60062D17F /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6FD6859C2F35A2D60062D17F /* RunWProxy */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		6FD685A12F35A2D60062D17F /* RunWProxy */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (6FD685AC2F35A2D60062D17F /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = RunWProxy; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		300 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6FD6859A2F35A2D60062D17F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6FD685A02F35A2D60062D17F /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -49,6 +99,8 @@
 			isa = PBXGroup;
 			children = (
 				500 /* RunW */,
+				6FD685A12F35A2D60062D17F /* RunWProxy */,
+				6FD6859E2F35A2D60062D17F /* Frameworks */,
 				401 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -57,6 +109,7 @@
 			isa = PBXGroup;
 			children = (
 				100 /* RunW.app */,
+				6FD6859D2F35A2D60062D17F /* RunWProxy.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,6 +164,14 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
+		6FD6859E2F35A2D60062D17F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				6FD6859F2F35A2D60062D17F /* NetworkExtension.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -121,15 +182,39 @@
 				601 /* Sources */,
 				300 /* Frameworks */,
 				602 /* Resources */,
+				6FD685A92F35A2D60062D17F /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				6FD685A72F35A2D60062D17F /* PBXTargetDependency */,
 			);
 			name = RunW;
 			productName = RunW;
 			productReference = 100 /* RunW.app */;
 			productType = "com.apple.product-type.application";
+		};
+		6FD6859C2F35A2D60062D17F /* RunWProxy */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6FD685AD2F35A2D60062D17F /* Build configuration list for PBXNativeTarget "RunWProxy" */;
+			buildPhases = (
+				6FD685992F35A2D60062D17F /* Sources */,
+				6FD6859A2F35A2D60062D17F /* Frameworks */,
+				6FD6859B2F35A2D60062D17F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6FD685A12F35A2D60062D17F /* RunWProxy */,
+			);
+			name = RunWProxy;
+			packageProductDependencies = (
+			);
+			productName = RunWProxy;
+			productReference = 6FD6859D2F35A2D60062D17F /* RunWProxy.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -138,11 +223,14 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1540;
+				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					600 = {
 						CreatedOnToolsVersion = 15.4;
+					};
+					6FD6859C2F35A2D60062D17F = {
+						CreatedOnToolsVersion = 26.1;
 					};
 				};
 			};
@@ -160,6 +248,7 @@
 			projectRoot = "";
 			targets = (
 				600 /* RunW */,
+				6FD6859C2F35A2D60062D17F /* RunWProxy */,
 			);
 		};
 /* End PBXProject section */
@@ -170,6 +259,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				009 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6FD6859B2F35A2D60062D17F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -192,9 +288,86 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6FD685992F35A2D60062D17F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		6FD685A72F35A2D60062D17F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6FD6859C2F35A2D60062D17F /* RunWProxy */;
+			targetProxy = 6FD685A62F35A2D60062D17F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		6FD685AA2F35A2D60062D17F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RunWProxy/RunWProxy.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LLNRYKR4A6;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunWProxy/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunWProxy;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dundun.runw.RunWProxy;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		6FD685AB2F35A2D60062D17F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RunWProxy/RunWProxy.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LLNRYKR4A6;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunWProxy/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunWProxy;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dundun.runw.RunWProxy;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		900 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -332,6 +505,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = LLNRYKR4A6;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
@@ -347,7 +521,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.biubiu.runw;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dundun.runw;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -365,6 +539,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = LLNRYKR4A6;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
@@ -380,7 +555,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.biubiu.runw;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dundun.runw;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -390,6 +565,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6FD685AD2F35A2D60062D17F /* Build configuration list for PBXNativeTarget "RunWProxy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6FD685AA2F35A2D60062D17F /* Debug */,
+				6FD685AB2F35A2D60062D17F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		700 /* Build configuration list for PBXNativeTarget "RunW" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

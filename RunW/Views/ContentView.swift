@@ -125,35 +125,30 @@ struct ContentView: View {
             
             Spacer()
             
-            // Surge 连接状态
-            if proxyManager.surgeConnected {
-                Button {
-                    Task {
-                        await proxyManager.syncRulesToSurge(apps: appManager.apps)
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        Text("同步规则")
-                    }
-                    .font(.caption)
+            // Network Extension 状态
+            if proxyManager.extensionInstalled {
+                // 启动/停止按钮
+                Toggle(isOn: $proxyManager.isEnabled) {
+                    Text(proxyManager.isEnabled ? "运行中" : "已停止")
+                        .font(.caption)
                 }
-                .buttonStyle(.bordered)
+                .toggleStyle(.switch)
                 .controlSize(.small)
                 
+                // 状态指示器
                 Circle()
-                    .fill(.green)
+                    .fill(proxyManager.isEnabled ? .green : .gray)
                     .frame(width: 8, height: 8)
-                Text("Surge 已连接")
+                Text(proxyManager.proxyStatus)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 Button {
                     Task {
-                        await proxyManager.checkSurgeConnection()
+                        await proxyManager.installExtension()
                     }
                 } label: {
-                    Text("连接 Surge")
+                    Text("安装扩展")
                         .font(.caption)
                 }
                 .buttonStyle(.bordered)
@@ -162,7 +157,7 @@ struct ContentView: View {
                 Circle()
                     .fill(.orange)
                     .frame(width: 8, height: 8)
-                Text("未连接")
+                Text("未安装")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

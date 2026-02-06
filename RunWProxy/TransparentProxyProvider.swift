@@ -1,262 +1,307 @@
-import Foundation
 import NetworkExtension
+import Network
+import os.log
 
-/// 透明代理提供者 - 实现按应用代理
-class TransparentProxyProvider: NETransparentProxyProvider {
+/// 透明代理 Provider - 实现按应用代理
+class TransparentProxyProvider: NEAppProxyProvider {
     
-    // 配置的代理地址
+    private let logger = Logger(subsystem: "com.dundun.runw.proxy", category: "TransparentProxy")
+    
+    // 代理配置
     private var proxyHost: String = "127.0.0.1"
-    private var proxyPort: Int = 6153
-    private var useSOCKS5: Bool = true
+    private var socksPort: UInt16 = 7891
     
-    // 需要代理的 Bundle ID 列表
-    private var proxiedBundleIDs: Set<String> = []
+    // App Group 共享数据
+    private let appGroupID = "LLNRYKR4A6.com.dundun.runw"
     
-    // 需要拒绝的 Bundle ID 列表
-    private var rejectedBundleIDs: Set<String> = []
+    // MARK: - Lifecycle
     
-    override func startProxy(options: [String : Any]?, completionHandler: @escaping (Error?) -> Void) {
-        NSLog("[RunWProxy] 启动透明代理...")
+    override func startProxy(options: [String: Any]?, completionHandler: @escaping (Error?) -> Void) {
+        logger.info("🚀 启动透明代理...")
         
-        // 从 options 读取配置
+        // 从 App Group 读取配置
+        loadConfig()
+        
+        // 从启动选项读取配置
         if let host = options?["proxyHost"] as? String {
             proxyHost = host
         }
-        if let port = options?["proxyPort"] as? Int {
-            proxyPort = port
-        }
-        if let useSocks = options?["useSOCKS5"] as? Bool {
-            useSOCKS5 = useSocks
-        }
-        if let proxied = options?["proxiedBundleIDs"] as? [String] {
-            proxiedBundleIDs = Set(proxied)
-        }
-        if let rejected = options?["rejectedBundleIDs"] as? [String] {
-            rejectedBundleIDs = Set(rejected)
+        if let socks = options?["socksPort"] as? NSNumber {
+            socksPort = socks.uint16Value
         }
         
-        NSLog("[RunWProxy] 配置: \(proxyHost):\(proxyPort), SOCKS5: \(useSOCKS5)")
-        NSLog("[RunWProxy] 代理应用: \(proxiedBundleIDs)")
-        NSLog("[RunWProxy] 拒绝应用: \(rejectedBundleIDs)")
+        logger.info("✅ 代理配置: SOCKS5 \(self.proxyHost):\(self.socksPort)")
         
         completionHandler(nil)
     }
     
     override func stopProxy(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
-        NSLog("[RunWProxy] 停止透明代理, 原因: \(reason)")
+        logger.info("🛑 停止透明代理, 原因: \(String(describing: reason))")
         completionHandler()
     }
     
+    // MARK: - Config
+    
+    private func loadConfig() {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
+        
+        if let host = defaults.string(forKey: "proxyHost") {
+            proxyHost = host
+        }
+        if defaults.object(forKey: "socksPort") != nil {
+            socksPort = UInt16(defaults.integer(forKey: "socksPort"))
+        }
+    }
+    
+    // MARK: - Flow Handling
+    
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
-        // 获取发起连接的应用信息
-        guard let appDescription = flow.metaData.sourceAppSigningIdentifier.components(separatedBy: ".").last else {
-            // 无法识别应用，直接放行
-            return false
-        }
+        let appID = flow.metaData.sourceAppSigningIdentifier
+        logger.info("📱 收到流量: \(appID)")
         
-        let bundleID = flow.metaData.sourceAppSigningIdentifier
-        
-        // 检查是否需要拒绝
-        if rejectedBundleIDs.contains(bundleID) {
-            NSLog("[RunWProxy] 拒绝连接: \(bundleID)")
-            flow.closeReadWithError(nil)
-            flow.closeWriteWithError(nil)
+        if let tcpFlow = flow as? NEAppProxyTCPFlow {
+            Task {
+                await handleTCPFlow(tcpFlow)
+            }
+            return true
+        } else if let udpFlow = flow as? NEAppProxyUDPFlow {
+            Task {
+                await handleUDPFlow(udpFlow)
+            }
             return true
         }
         
-        // 检查是否需要代理
-        if proxiedBundleIDs.contains(bundleID) {
-            NSLog("[RunWProxy] 代理连接: \(bundleID)")
-            handleProxiedFlow(flow)
-            return true
-        }
-        
-        // 其他应用直连
         return false
     }
     
-    private func handleProxiedFlow(_ flow: NEAppProxyFlow) {
-        if let tcpFlow = flow as? NEAppProxyTCPFlow {
-            handleTCPFlow(tcpFlow)
-        } else if let udpFlow = flow as? NEAppProxyUDPFlow {
-            handleUDPFlow(udpFlow)
-        }
-    }
+    // MARK: - TCP Flow
     
-    private func handleTCPFlow(_ flow: NEAppProxyTCPFlow) {
-        // 获取目标地址
-        guard let endpoint = flow.remoteEndpoint as? NWHostEndpoint else {
+    private func handleTCPFlow(_ flow: NEAppProxyTCPFlow) async {
+        guard let remoteEndpoint = flow.remoteEndpoint as? NWHostEndpoint else {
+            logger.error("❌ 无法获取远程端点")
             flow.closeReadWithError(nil)
             flow.closeWriteWithError(nil)
             return
         }
         
-        let destHost = endpoint.hostname
-        let destPort = endpoint.port
+        let targetHost = remoteEndpoint.hostname
+        let targetPort = UInt16(remoteEndpoint.port) ?? 80
         
-        NSLog("[RunWProxy] TCP 连接: \(destHost):\(destPort)")
+        logger.info("🔗 TCP 连接: \(targetHost):\(targetPort)")
         
-        // 创建到代理服务器的连接
-        let proxyEndpoint = NWHostEndpoint(hostname: proxyHost, port: String(proxyPort))
+        // 创建到 SOCKS5 代理的连接
+        let proxyEndpoint = NWEndpoint.hostPort(
+            host: NWEndpoint.Host(proxyHost),
+            port: NWEndpoint.Port(integerLiteral: socksPort)
+        )
         
-        // 打开到代理的连接
-        flow.open(withLocalEndpoint: nil) { error in
-            if let error = error {
-                NSLog("[RunWProxy] 打开流失败: \(error)")
-                return
+        let connection = NWConnection(to: proxyEndpoint, using: .tcp)
+        
+        // 启动连接
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            connection.stateUpdateHandler = { [weak self] state in
+                switch state {
+                case .ready:
+                    self?.logger.info("✅ 代理连接就绪")
+                    continuation.resume()
+                case .failed(let error):
+                    self?.logger.error("❌ 代理连接失败: \(error.localizedDescription)")
+                    continuation.resume()
+                case .cancelled:
+                    self?.logger.info("🚫 代理连接取消")
+                    continuation.resume()
+                default:
+                    break
+                }
+            }
+            connection.start(queue: .global())
+        }
+        
+        guard connection.state == .ready else {
+            flow.closeReadWithError(nil)
+            flow.closeWriteWithError(nil)
+            return
+        }
+        
+        // SOCKS5 握手
+        do {
+            try await performSOCKS5Handshake(connection: connection, host: targetHost, port: targetPort)
+        } catch {
+            logger.error("❌ SOCKS5 握手失败: \(error.localizedDescription)")
+            connection.cancel()
+            flow.closeReadWithError(error)
+            flow.closeWriteWithError(error)
+            return
+        }
+        
+        // 打开 flow
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                flow.open(withLocalEndpoint: nil) { error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume()
+                    }
+                }
+            }
+        } catch {
+            logger.error("❌ 打开 flow 失败: \(error.localizedDescription)")
+            connection.cancel()
+            return
+        }
+        
+        logger.info("🔄 开始双向转发: \(targetHost):\(targetPort)")
+        
+        // 双向转发数据
+        await withTaskGroup(of: Void.self) { group in
+            // Flow -> Proxy
+            group.addTask {
+                await self.forwardFlowToConnection(flow: flow, connection: connection)
             }
             
-            // 如果使用 SOCKS5，发送握手
-            if self.useSOCKS5 {
-                self.performSOCKS5Handshake(flow: flow, destHost: destHost, destPort: destPort)
-            } else {
-                // HTTP CONNECT
-                self.performHTTPConnect(flow: flow, destHost: destHost, destPort: destPort)
+            // Proxy -> Flow
+            group.addTask {
+                await self.forwardConnectionToFlow(connection: connection, flow: flow)
             }
         }
-    }
-    
-    private func handleUDPFlow(_ flow: NEAppProxyUDPFlow) {
-        // UDP 代理支持（简化版，直接放行）
-        NSLog("[RunWProxy] UDP 流量，暂不支持代理")
-        flow.closeReadWithError(nil)
-        flow.closeWriteWithError(nil)
-    }
-    
-    // MARK: - SOCKS5 Protocol
-    
-    private func performSOCKS5Handshake(flow: NEAppProxyTCPFlow, destHost: String, destPort: String) {
-        // SOCKS5 握手第一步：发送版本和认证方法
-        // 0x05 = SOCKS5, 0x01 = 1个方法, 0x00 = 无认证
-        let greeting = Data([0x05, 0x01, 0x00])
         
-        flow.write(greeting) { error in
-            if let error = error {
-                NSLog("[RunWProxy] SOCKS5 握手失败: \(error)")
-                return
-            }
-            
-            // 读取服务器响应
-            flow.readData(ofMinLength: 2, maxLength: 2) { responseData, error in
-                if let error = error {
-                    NSLog("[RunWProxy] SOCKS5 握手响应失败: \(error)")
-                    return
-                }
-                
-                guard let data = responseData, data.count == 2,
-                      data[0] == 0x05, data[1] == 0x00 else {
-                    NSLog("[RunWProxy] SOCKS5 握手响应无效")
-                    return
-                }
-                
-                // 发送连接请求
-                self.sendSOCKS5ConnectRequest(flow: flow, destHost: destHost, destPort: destPort)
-            }
+        connection.cancel()
+        logger.info("✅ 连接结束: \(targetHost):\(targetPort)")
+    }
+    
+    // MARK: - SOCKS5 Handshake
+    
+    private func performSOCKS5Handshake(connection: NWConnection, host: String, port: UInt16) async throws {
+        // 步骤 1: 发送问候消息
+        let greeting = Data([0x05, 0x01, 0x00]) // SOCKS5, 1 method, No Auth
+        try await send(data: greeting, on: connection)
+        
+        // 步骤 2: 读取响应
+        let response1 = try await receive(on: connection, minLength: 2)
+        guard response1.count >= 2, response1[0] == 0x05, response1[1] == 0x00 else {
+            throw ProxyError.handshakeFailed
         }
-    }
-    
-    private func sendSOCKS5ConnectRequest(flow: NEAppProxyTCPFlow, destHost: String, destPort: String) {
-        // SOCKS5 连接请求
-        // 0x05 = SOCKS5, 0x01 = CONNECT, 0x00 = 保留, 0x03 = 域名类型
-        var request = Data([0x05, 0x01, 0x00, 0x03])
         
-        // 域名长度 + 域名
-        let hostData = destHost.data(using: .utf8)!
-        request.append(UInt8(hostData.count))
-        request.append(hostData)
+        // 步骤 3: 发送连接请求
+        var connectRequest = Data([0x05, 0x01, 0x00, 0x03]) // SOCKS5, CONNECT, RSV, DOMAINNAME
+        connectRequest.append(UInt8(host.utf8.count))
+        connectRequest.append(contentsOf: host.utf8)
+        connectRequest.append(UInt8(port >> 8))
+        connectRequest.append(UInt8(port & 0xFF))
         
-        // 端口（大端序）
-        let port = UInt16(destPort) ?? 443
-        request.append(UInt8(port >> 8))
-        request.append(UInt8(port & 0xFF))
+        try await send(data: connectRequest, on: connection)
         
-        flow.write(request) { error in
-            if let error = error {
-                NSLog("[RunWProxy] SOCKS5 连接请求失败: \(error)")
-                return
-            }
-            
-            // 读取连接响应（至少10字节）
-            flow.readData(ofMinLength: 10, maxLength: 32) { responseData, error in
-                if let error = error {
-                    NSLog("[RunWProxy] SOCKS5 连接响应失败: \(error)")
-                    return
-                }
-                
-                guard let data = responseData, data.count >= 10,
-                      data[0] == 0x05, data[1] == 0x00 else {
-                    NSLog("[RunWProxy] SOCKS5 连接失败")
-                    return
-                }
-                
-                NSLog("[RunWProxy] SOCKS5 连接成功: \(destHost):\(destPort)")
-                // 连接建立成功，现在可以转发数据
-                self.startForwarding(flow: flow)
-            }
+        // 步骤 4: 读取连接响应
+        let response2 = try await receive(on: connection, minLength: 4)
+        guard response2.count >= 2, response2[0] == 0x05, response2[1] == 0x00 else {
+            throw ProxyError.connectionRejected
         }
-    }
-    
-    // MARK: - HTTP CONNECT
-    
-    private func performHTTPConnect(flow: NEAppProxyTCPFlow, destHost: String, destPort: String) {
-        let connectRequest = "CONNECT \(destHost):\(destPort) HTTP/1.1\r\nHost: \(destHost):\(destPort)\r\n\r\n"
-        let requestData = connectRequest.data(using: .utf8)!
         
-        flow.write(requestData) { error in
-            if let error = error {
-                NSLog("[RunWProxy] HTTP CONNECT 失败: \(error)")
-                return
-            }
-            
-            // 读取响应
-            flow.readData(ofMinLength: 12, maxLength: 1024) { responseData, error in
-                if let error = error {
-                    NSLog("[RunWProxy] HTTP CONNECT 响应失败: \(error)")
-                    return
-                }
-                
-                guard let data = responseData,
-                      let response = String(data: data, encoding: .utf8),
-                      response.contains("200") else {
-                    NSLog("[RunWProxy] HTTP CONNECT 失败")
-                    return
-                }
-                
-                NSLog("[RunWProxy] HTTP CONNECT 成功: \(destHost):\(destPort)")
-                self.startForwarding(flow: flow)
-            }
-        }
+        logger.info("🤝 SOCKS5 握手成功: \(host):\(port)")
     }
     
     // MARK: - Data Forwarding
     
-    private func startForwarding(flow: NEAppProxyTCPFlow) {
-        // 持续读取和转发数据
-        readAndForward(flow: flow)
-    }
-    
-    private func readAndForward(flow: NEAppProxyTCPFlow) {
-        flow.readData(ofMinLength: 1, maxLength: 65536) { data, error in
-            if let error = error {
-                NSLog("[RunWProxy] 读取数据错误: \(error)")
-                return
-            }
-            
-            guard let data = data, !data.isEmpty else {
-                // 连接关闭
-                return
-            }
-            
-            // 写入数据
-            flow.write(data) { writeError in
-                if let writeError = writeError {
-                    NSLog("[RunWProxy] 写入数据错误: \(writeError)")
-                    return
+    private func forwardFlowToConnection(flow: NEAppProxyTCPFlow, connection: NWConnection) async {
+        while true {
+            do {
+                let data = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+                    flow.readData { data, error in
+                        if let error = error {
+                            continuation.resume(throwing: error)
+                        } else if let data = data, !data.isEmpty {
+                            continuation.resume(returning: data)
+                        } else {
+                            continuation.resume(returning: Data())
+                        }
+                    }
                 }
                 
-                // 继续读取
-                self.readAndForward(flow: flow)
+                if data.isEmpty { break }
+                
+                try await send(data: data, on: connection)
+            } catch {
+                break
             }
+        }
+        
+        flow.closeReadWithError(nil)
+    }
+    
+    private func forwardConnectionToFlow(connection: NWConnection, flow: NEAppProxyTCPFlow) async {
+        while true {
+            do {
+                let data = try await receive(on: connection, minLength: 1)
+                if data.isEmpty { break }
+                
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    flow.write(data) { error in
+                        if let error = error {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume()
+                        }
+                    }
+                }
+            } catch {
+                break
+            }
+        }
+        
+        flow.closeWriteWithError(nil)
+    }
+    
+    // MARK: - UDP Flow
+    
+    private func handleUDPFlow(_ flow: NEAppProxyUDPFlow) async {
+        // UDP 暂时直接放行
+        flow.open(withLocalEndpoint: nil) { error in
+            if let error = error {
+                self.logger.error("❌ UDP 打开失败: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    // MARK: - Network Helpers
+    
+    private func send(data: Data, on connection: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.send(content: data, completion: .contentProcessed { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            })
+        }
+    }
+    
+    private func receive(on connection: NWConnection, minLength: Int) async throws -> Data {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+            connection.receive(minimumIncompleteLength: minLength, maximumLength: 65535) { data, _, _, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: data ?? Data())
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Errors
+
+enum ProxyError: Error, LocalizedError {
+    case handshakeFailed
+    case connectionRejected
+    case invalidResponse
+    
+    var errorDescription: String? {
+        switch self {
+        case .handshakeFailed: return "SOCKS5 握手失败"
+        case .connectionRejected: return "代理拒绝连接"
+        case .invalidResponse: return "无效的代理响应"
         }
     }
 }
