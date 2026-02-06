@@ -11,6 +11,10 @@ class TransparentProxyProvider: NEAppProxyProvider {
     private var proxyHost: String = "127.0.0.1"
     private var socksPort: UInt16 = 7891
     
+    // 应用规则
+    private var proxyApps: Set<String> = []  // 需要代理的应用
+    private var rejectApps: Set<String> = [] // 需要拒绝的应用
+    
     // App Group 共享数据
     private let appGroupID = "LLNRYKR4A6.com.dundun.runw"
     
@@ -19,8 +23,9 @@ class TransparentProxyProvider: NEAppProxyProvider {
     override func startProxy(options: [String: Any]?, completionHandler: @escaping (Error?) -> Void) {
         logger.info("🚀 启动透明代理...")
         
-        // 从 App Group 读取配置
+        // 加载配置和规则
         loadConfig()
+        loadAppRules()
         
         // 从启动选项读取配置
         if let host = options?["proxyHost"] as? String {
@@ -31,6 +36,7 @@ class TransparentProxyProvider: NEAppProxyProvider {
         }
         
         logger.info("✅ 代理配置: SOCKS5 \(self.proxyHost):\(self.socksPort)")
+        logger.info("📱 代理应用: \(self.proxyApps.count) 个, 拒绝应用: \(self.rejectApps.count) 个")
         
         completionHandler(nil)
     }
@@ -53,11 +59,39 @@ class TransparentProxyProvider: NEAppProxyProvider {
         }
     }
     
+    private func loadAppRules() {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
+        
+        if let proxyList = defaults.stringArray(forKey: "proxyApps") {
+            proxyApps = Set(proxyList)
+        }
+        if let rejectList = defaults.stringArray(forKey: "rejectApps") {
+            rejectApps = Set(rejectList)
+        }
+    }
+    
     // MARK: - Flow Handling
     
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
         let appID = flow.metaData.sourceAppSigningIdentifier
-        logger.info("📱 收到流量: \(appID)")
+        
+        // 检查是否需要拒绝
+        if rejectApps.contains(appID) {
+            logger.info("🚫 拒绝流量: \(appID)")
+            flow.closeReadWithError(nil)
+            flow.closeWriteWithError(nil)
+            return true
+        }
+        
+        // 检查是否需要代理
+        let shouldProxy = proxyApps.isEmpty || proxyApps.contains(appID)
+        
+        if !shouldProxy {
+            logger.debug("⏭️ 直连: \(appID)")
+            return false // 不处理，让系统直连
+        }
+        
+        logger.info("📱 代理流量: \(appID)")
         
         if let tcpFlow = flow as? NEAppProxyTCPFlow {
             Task {

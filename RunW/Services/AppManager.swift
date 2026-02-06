@@ -9,7 +9,12 @@ class AppManager: ObservableObject {
     private let defaults = UserDefaults.standard
     private let appsKey = "savedApps"
     
+    // App Group 共享
+    private let appGroupID = "LLNRYKR4A6.com.dundun.runw"
+    private var sharedDefaults: UserDefaults?
+    
     init() {
+        sharedDefaults = UserDefaults(suiteName: appGroupID)
         loadApps()
     }
     
@@ -23,9 +28,26 @@ class AppManager: ObservableObject {
     }
     
     private func saveApps() {
+        // 保存到本地
         if let encoded = try? JSONEncoder().encode(apps) {
             defaults.set(encoded, forKey: appsKey)
         }
+        
+        // 同步到 App Group（供 Extension 读取）
+        syncToAppGroup()
+    }
+    
+    /// 同步应用列表到 App Group
+    private func syncToAppGroup() {
+        // 只保存启用的代理应用的 Bundle ID
+        let proxyBundleIDs = enabledProxyApps.map { $0.bundleIdentifier }
+        let rejectBundleIDs = enabledRejectApps.map { $0.bundleIdentifier }
+        
+        sharedDefaults?.set(proxyBundleIDs, forKey: "proxyApps")
+        sharedDefaults?.set(rejectBundleIDs, forKey: "rejectApps")
+        sharedDefaults?.synchronize()
+        
+        print("📱 同步到 App Group: \(proxyBundleIDs.count) 个代理, \(rejectBundleIDs.count) 个拒绝")
     }
     
     // MARK: - App Management
