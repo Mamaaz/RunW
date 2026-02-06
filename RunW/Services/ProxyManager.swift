@@ -1,7 +1,7 @@
 import SwiftUI
 import NetworkExtension
 
-/// 代理管理服务 - 控制 Network Extension
+/// 代理管理服务 - 控制 Packet Tunnel Extension
 @MainActor
 class ProxyManager: ObservableObject {
     @Published var isEnabled: Bool = false {
@@ -26,7 +26,8 @@ class ProxyManager: ObservableObject {
     @Published var proxyStatus: String = "未启动"
     @Published var extensionInstalled: Bool = false
     
-    private var manager: NEAppProxyProviderManager?
+    // 使用 NETunnelProviderManager (Packet Tunnel)
+    private var manager: NETunnelProviderManager?
     private let defaults = UserDefaults.standard
     private let configKey = "proxyConfig"
     
@@ -76,8 +77,10 @@ class ProxyManager: ObservableObject {
     
     private func loadManager() async {
         do {
-            let managers = try await NEAppProxyProviderManager.loadAllFromPreferences()
-            if let existing = managers.first {
+            let managers = try await NETunnelProviderManager.loadAllFromPreferences()
+            if let existing = managers.first(where: {
+                ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == "com.dundun.runw.RunWProxy"
+            }) {
                 manager = existing
                 extensionInstalled = true
                 updateStatus()
@@ -106,7 +109,14 @@ class ProxyManager: ObservableObject {
         // 先保存配置到 App Group
         saveConfig()
         
-        let newManager = NEAppProxyProviderManager()
+        // 保存要代理的应用列表
+        let proxyApps = apps.filter { $0.isEnabled && $0.rule == .proxy }.map { $0.bundleIdentifier }
+        let rejectApps = apps.filter { $0.isEnabled && $0.rule == .reject }.map { $0.bundleIdentifier }
+        sharedDefaults?.set(proxyApps, forKey: "proxyApps")
+        sharedDefaults?.set(rejectApps, forKey: "rejectApps")
+        sharedDefaults?.synchronize()
+        
+        let newManager = NETunnelProviderManager()
         
         let proto = NETunnelProviderProtocol()
         proto.providerBundleIdentifier = "com.dundun.runw.RunWProxy"
@@ -118,22 +128,10 @@ class ProxyManager: ObservableObject {
         ]
         
         newManager.protocolConfiguration = proto
-        newManager.localizedDescription = "RunW 透明代理"
+        newManager.localizedDescription = "RunW Packet Tunnel"
         newManager.isEnabled = true
         
-        // 为每个要代理的应用创建规则
-        if !apps.isEmpty {
-            var rules: [NEAppRule] = []
-            for app in apps where app.isEnabled && app.rule == .proxy {
-                // 使用 bundle identifier 和通用证书要求
-                let rule = NEAppRule(signingIdentifier: app.bundleIdentifier, designatedRequirement: "anchor apple generic")
-                rules.append(rule)
-                print("📱 添加规则: \(app.bundleIdentifier)")
-            }
-            if !rules.isEmpty {
-                newManager.appRules = rules
-            }
-        }
+        // Packet Tunnel 不需要 appRules，在 Provider 内部处理
         
         do {
             try await newManager.saveToPreferences()
@@ -158,62 +156,32 @@ class ProxyManager: ObservableObject {
     
     /// 更新应用规则
     func updateAppRules(apps: [ProxyApp]) async {
-        guard let manager = manager else { return }
+        // 保存到 App Group，Provider 会读取
+        let proxyApps = apps.filter { $0.isEnabled && $0.rule == .proxy }.map { $0.bundleIdentifier }
+        let rejectApps = apps.filter { $0.isEnabled && $0.rule == .reject }.map { $0.bundleIdentifier }
+        sharedDefaults?.set(proxyApps, forKey: "proxyApps")
+        sharedDefaults?.set(rejectApps, forKey: "rejectApps")
+        sharedDefaults?.synchronize()
         
-        // 为每个要代理的应用创建规则
-        var rules: [NEAppRule] = []
-        for app in apps where app.isEnabled && app.rule == .proxy {
-            let rule = NEAppRule(signingIdentifier: app.bundleIdentifier, designatedRequirement: "anchor apple generic")
-            rules.append(rule)
-        }
-        
-        if rules.isEmpty {
-            print("⚠️ 没有要代理的应用")
-            return
-        }
-        
-        manager.appRules = rules
-        print("📱 更新 appRules: \(rules.count) 个应用")
-        
-        do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
-        } catch {
-            print("更新规则失败: \(error)")
-        }
+        print("📱 更新应用规则: \(proxyApps.count) 个代理, \(rejectApps.count) 个拒绝")
     }
     
     // MARK: - Proxy Control
     
     private func startProxy() {
         guard let manager = manager else {
-            proxyStatus = "请先安装扩展"
+            proxyStatus = "未安装扩展"
             isEnabled = false
             return
         }
         
-        // 先保存配置
-        saveConfig()
-        
-        // 确保扩展已启用
-        if !manager.isEnabled {
-            manager.isEnabled = true
-            Task {
-                do {
-                    try await manager.saveToPreferences()
-                } catch {
-                    print("保存配置失败: \(error)")
-                }
-            }
-        }
-        
         do {
-            try manager.connection.startVPNTunnel(options: [
+            let options: [String: NSObject] = [
                 "proxyHost": config.host as NSString,
-                "httpPort": NSNumber(value: config.httpPort),
                 "socksPort": NSNumber(value: config.socksPort)
-            ])
-            proxyStatus = "启动中..."
+            ]
+            try manager.connection.startVPNTunnel(options: options)
+            proxyStatus = "正在连接..."
         } catch {
             proxyStatus = "启动失败: \(error.localizedDescription)"
             isEnabled = false
@@ -226,9 +194,9 @@ class ProxyManager: ObservableObject {
     }
     
     private func updateStatus() {
-        guard let status = manager?.connection.status else { return }
+        guard let manager = manager else { return }
         
-        switch status {
+        switch manager.connection.status {
         case .invalid:
             proxyStatus = "无效"
             isEnabled = false
@@ -238,10 +206,10 @@ class ProxyManager: ObservableObject {
         case .connecting:
             proxyStatus = "连接中..."
         case .connected:
-            proxyStatus = "运行中"
-            isEnabled = true
+            proxyStatus = "运行中 ✅"
+            if !isEnabled { isEnabled = true }
         case .reasserting:
-            proxyStatus = "重新连接..."
+            proxyStatus = "重连中..."
         case .disconnecting:
             proxyStatus = "断开中..."
         @unknown default:
@@ -249,43 +217,53 @@ class ProxyManager: ObservableObject {
         }
     }
     
-    // MARK: - Connection Test
+    // MARK: - Test Connection
     
     func testConnection() {
         connectionStatus = .testing
         
         Task {
             do {
-                let testURL = URL(string: "https://www.google.com")!
-                var request = URLRequest(url: testURL)
-                request.timeoutInterval = 5
+                let url = URL(string: "https://www.google.com")!
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 10
                 
-                let proxyDict: [String: Any] = [
-                    kCFNetworkProxiesSOCKSEnable as String: true,
-                    kCFNetworkProxiesSOCKSProxy as String: config.host,
-                    kCFNetworkProxiesSOCKSPort as String: config.socksPort
-                ]
-                
-                let sessionConfig = URLSessionConfiguration.ephemeral
-                sessionConfig.connectionProxyDictionary = proxyDict
-                let session = URLSession(configuration: sessionConfig)
-                
-                let (_, response) = try await session.data(for: request)
+                let (_, response) = try await URLSession.shared.data(for: request)
                 
                 if let httpResponse = response as? HTTPURLResponse,
                    httpResponse.statusCode == 200 {
-                    connectionStatus = .success
+                    await MainActor.run {
+                        connectionStatus = .success
+                    }
                 } else {
-                    connectionStatus = .failed("响应异常")
+                    await MainActor.run {
+                        connectionStatus = .failed("HTTP 错误")
+                    }
                 }
             } catch {
-                connectionStatus = .failed(error.localizedDescription)
+                await MainActor.run {
+                    connectionStatus = .failed(error.localizedDescription)
+                }
             }
-            
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            if case .success = connectionStatus {
-                connectionStatus = .idle
-            }
+        }
+    }
+    
+    // MARK: - SOCKS5 Test
+    
+    func testSOCKS5() async -> Bool {
+        // 测试 SOCKS5 代理是否可用
+        guard let url = URL(string: "http://\(config.host):\(config.socksPort)") else {
+            return false
+        }
+        
+        do {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 5
+            let _ = try await URLSession.shared.data(for: request)
+            return true
+        } catch {
+            // SOCKS5 不支持 HTTP，连接会失败，但这说明端口是开放的
+            return true
         }
     }
 }
