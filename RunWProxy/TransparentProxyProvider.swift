@@ -7,31 +7,45 @@ class TransparentProxyProvider: NEAppProxyProvider {
     
     private let logger = Logger(subsystem: "com.dundun.runw.proxy", category: "TransparentProxy")
     
-    // 代理配置
-    private var proxyHost: String = "127.0.0.1"
-    private var socksPort: UInt16 = 7891
+    // 代理配置 - 默认值
+    private var proxyHost: String = "192.168.1.68"
+    private var socksPort: UInt16 = 6153
     
     // 应用规则
     private var proxyApps: Set<String> = []
     private var rejectApps: Set<String> = []
-    
-    // App Group
-    private let appGroupID = "LLNRYKR4A6.com.dundun.runw"
     
     // MARK: - Lifecycle
     
     override func startProxy(options: [String: Any]?, completionHandler: @escaping (Error?) -> Void) {
         logger.info("🚀 启动透明代理...")
         
-        loadConfig()
-        loadAppRules()
+        // 优先从 protocolConfiguration 读取配置
+        if let proto = self.protocolConfiguration as? NETunnelProviderProtocol,
+           let config = proto.providerConfiguration {
+            
+            if let host = config["proxyHost"] as? String {
+                proxyHost = host
+                logger.info("📍 从配置读取 Host: \(host)")
+            }
+            if let socks = config["socksPort"] as? Int {
+                socksPort = UInt16(socks)
+                logger.info("📍 从配置读取 SOCKS5 端口: \(socks)")
+            }
+        }
         
+        // 其次从启动选项读取
         if let host = options?["proxyHost"] as? String {
             proxyHost = host
+            logger.info("📍 从选项读取 Host: \(host)")
         }
         if let socks = options?["socksPort"] as? NSNumber {
             socksPort = socks.uint16Value
+            logger.info("📍 从选项读取 SOCKS5 端口: \(socks)")
         }
+        
+        // 加载应用规则
+        loadAppRules()
         
         logger.info("✅ 代理: \(self.proxyHost):\(self.socksPort), 应用: \(self.proxyApps.count) 个")
         
@@ -43,27 +57,23 @@ class TransparentProxyProvider: NEAppProxyProvider {
         completionHandler()
     }
     
-    // MARK: - Config
-    
-    private func loadConfig() {
-        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
-        
-        if let host = defaults.string(forKey: "proxyHost") {
-            proxyHost = host
-        }
-        if defaults.object(forKey: "socksPort") != nil {
-            socksPort = UInt16(defaults.integer(forKey: "socksPort"))
-        }
-    }
+    // MARK: - App Rules
     
     private func loadAppRules() {
-        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
+        // 尝试从 App Group 读取应用规则
+        let appGroupID = "LLNRYKR4A6.com.dundun.runw"
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            logger.warning("⚠️ 无法访问 App Group")
+            return
+        }
         
         if let proxyList = defaults.stringArray(forKey: "proxyApps") {
             proxyApps = Set(proxyList)
+            logger.info("📱 代理应用: \(proxyList)")
         }
         if let rejectList = defaults.stringArray(forKey: "rejectApps") {
             rejectApps = Set(rejectList)
+            logger.info("🚫 拒绝应用: \(rejectList)")
         }
     }
     
@@ -80,7 +90,7 @@ class TransparentProxyProvider: NEAppProxyProvider {
             return true
         }
         
-        // 代理规则：如果设置了代理应用列表，只代理列表中的应用
+        // 代理规则
         let shouldProxy = proxyApps.isEmpty || proxyApps.contains(appID)
         
         if !shouldProxy {
@@ -114,7 +124,7 @@ class TransparentProxyProvider: NEAppProxyProvider {
         let targetHost = remoteEndpoint.hostname
         let targetPort = UInt16(remoteEndpoint.port) ?? 80
         
-        logger.info("🔗 连接: \(targetHost):\(targetPort)")
+        logger.info("🔗 连接: \(targetHost):\(targetPort) via \(self.proxyHost):\(self.socksPort)")
         
         // 1. 创建代理连接
         let proxyEndpoint = NWEndpoint.hostPort(
@@ -175,7 +185,11 @@ class TransparentProxyProvider: NEAppProxyProvider {
                 case .ready:
                     resumed = true
                     continuation.resume(returning: true)
-                case .failed, .cancelled:
+                case .failed(let error):
+                    self.logger.error("❌ 连接失败: \(error.localizedDescription)")
+                    resumed = true
+                    continuation.resume(returning: false)
+                case .cancelled:
                     resumed = true
                     continuation.resume(returning: false)
                 default:
